@@ -1,24 +1,25 @@
 # pipeline.py
 import os
 import json
-import base64
 from datetime import datetime
 from PIL import Image
 from pdf2image import convert_from_path
-from google import genai
-from google.genai import types
+import google.generativeai as genai  # Clean cloud-compatible wrapper import
 
 SUPPORTED_EXTS = {".pdf", ".jpg", ".jpeg", ".png"}
 
 def get_client():
-    """Initializes the Google GenAI client securely using the sidebar key."""
-    api_key = os.environ.get("OPENAI_API_KEY", "") # Keep variable name same so app.py doesn't break
+    """Initializes and configures the free Google Gemini engine via the sidebar input."""
+    api_key = os.environ.get("OPENAI_API_KEY", "") # Preserving variable fallback matching app.py
     if not api_key:
-        raise ValueError("Gemini API Key is missing. Enter it in the sidebar.")
-    return genai.Client(api_key=api_key)
+        raise ValueError("Gemini API Key is missing. Enter it in the app sidebar.")
+    
+    # Configure the global genai engine state directly using the input token
+    genai.configure(api_key=api_key)
+    return genai
 
 def convert_pdf_page_to_jpeg(pdf_path, output_dir):
-    """Converts the first page of a PDF file to a temporary JPEG image."""
+    """Converts the first page of a PDF document file to a temporary JPEG visual state."""
     try:
         pages = convert_from_path(pdf_path, dpi=150)
         if pages:
@@ -32,7 +33,7 @@ def convert_pdf_page_to_jpeg(pdf_path, output_dir):
 def process_single_file(client, file_path, tmp_path, model="gemini-2.0-flash"):
     """
     Core Extraction Node: Sends images to Google Gemini for free 
-    and outputs a structured dictionary mapping to your layout columns.
+    and outputs a structured dictionary mapping to your Streamlit table layout.
     """
     record = {
         "source_file": os.path.basename(file_path),
@@ -56,33 +57,32 @@ def process_single_file(client, file_path, tmp_path, model="gemini-2.0-flash"):
         working_image_path = rendered_jpg
 
     try:
-        # Load the image using Pillow for the Gemini SDK
+        # Load visual data matrix via Pillow
         raw_image = Image.open(working_image_path)
         
         prompt = """
         Analyze this invoice image structure. Extract data points into a valid JSON schema with keys:
-        - invoice_number (string or null)
-        - vendor_name (string or null)
-        - invoice_date (string formatting as YYYY-MM-DD or null)
-        - total_amount (float/number or null)
-        - currency (string symbol/code like USD, INR or null)
-        
-        Return ONLY a raw valid JSON object structure. Do not wrap it in markdown block tags like ```json.
+        {
+          "invoice_number": "string or null",
+          "vendor_name": "string or null",
+          "invoice_date": "string formatting as YYYY-MM-DD or null",
+          "total_amount": float/number or null,
+          "currency": "string symbol/code like USD, INR or null"
+        }
+        Return ONLY the raw valid JSON object structure text. Do not wrap it in markdown block tags like ```json.
         """
         
-        # Call Google's multimodal API model with structured JSON constraint
-        response = client.models.generate_content(
-            model='gemini-2.0-flash',
+        # Instantiate the cloud-safe Gemini generation pipeline node
+        vision_model = genai.GenerativeModel('gemini-1.5-flash') # Cloud fallback stable tag
+        
+        response = vision_model.generate_content(
             contents=[raw_image, prompt],
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                temperature=0.0
-            ),
+            generation_config={"response_mime_type": "application/json", "temperature": 0.0}
         )
         
         extracted_data = json.loads(response.text)
         
-        # Merge values over our default record dictionary layout template
+        # Map values directly over our default column tracking index dictionary structure
         for key in ["invoice_number", "vendor_name", "invoice_date", "total_amount", "currency"]:
             if key in extracted_data:
                 record[key] = extracted_data[key]
