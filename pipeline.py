@@ -24,7 +24,8 @@ def convert_pdf_page_to_jpeg(pdf_path, output_dir):
         pages = convert_from_path(pdf_path, dpi=150)
         if pages:
             jpeg_path = os.path.join(output_dir, "temp_render.jpg")
-            pages.save(jpeg_path, "JPEG")
+            # Fix: Call .save() on the first page image object in the list
+            pages[0].save(jpeg_path, "JPEG")
             return jpeg_path
     except Exception as e:
         print(f"PDF Conversion Error: {e}")
@@ -52,7 +53,7 @@ def process_single_file(client, file_path, tmp_path, model="gemini-2.0-flash"):
     if is_pdf:
         rendered_jpg = convert_pdf_page_to_jpeg(file_path, tmp_path)
         if not rendered_jpg:
-            record["error"] = "Failed to convert PDF page down to JPEG image format."
+            record["error"] = "Failed to convert PDF page down to JPEG image format. Ensure Poppler is installed."
             return record
         working_image_path = rendered_jpg
 
@@ -72,8 +73,8 @@ def process_single_file(client, file_path, tmp_path, model="gemini-2.0-flash"):
         Return ONLY the raw valid JSON object structure text. Do not wrap it in markdown block tags like ```json.
         """
         
-        # Instantiate the cloud-safe Gemini generation pipeline node
-        vision_model = genai.GenerativeModel('gemini-1.5-flash') # Cloud fallback stable tag
+        # Instantiate the cloud-safe Gemini generation pipeline node using the selected model parameter
+        vision_model = genai.GenerativeModel(model)
         
         response = vision_model.generate_content(
             contents=[raw_image, prompt],
