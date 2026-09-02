@@ -21,7 +21,7 @@ with st.sidebar:
         value=os.environ.get("OPENAI_API_KEY", ""),
         help="Paste your free Google AI Studio key here.",
     )
-    model = st.selectbox("Model", ["gemini-2.0-flash"], index=0)
+    model = st.selectbox("Model", ["gemini-3.6-flash", "gemini-2.5-flash"], index=0)
 
 # Main File Ingestion Uploader 
 uploaded_files = st.file_uploader(
@@ -71,7 +71,6 @@ if run:
         st.warning(f"{df['error'].notna().sum()} row(s) had an extraction error — check the `error` column.")
 
     # Export & Download Pipeline Nodes
-    out_path = Path(tempfile.gettempdir()) / "docuparse_output.xlsx"
     excel_bytes = dataframe_to_excel_bytes(df)
     
     st.download_button(
