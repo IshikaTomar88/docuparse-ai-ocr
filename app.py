@@ -16,14 +16,12 @@ st.caption("Vision-LLM invoice extraction — understands document layout, not j
 # Sidebar Configuration Layout
 with st.sidebar:
     st.header("Settings")
-    # Change line 19 inside app.py from "OpenAI API Key" to:
-api_key_input = st.text_input(
-    "Gemini API Key", type="password",
-    value=os.environ.get("OPENAI_API_KEY", ""),
-    help="Paste your free Google AI Studio key here.",
-)
-
-    model = st.selectbox("Model", ["gpt-4o-mini"], index=0)
+    api_key_input = st.text_input(
+        "Gemini API Key", type="password",
+        value=os.environ.get("OPENAI_API_KEY", ""),
+        help="Paste your free Google AI Studio key here.",
+    )
+    model = st.selectbox("Model", ["gemini-2.0-flash"], index=0)
 
 # Main File Ingestion Uploader 
 uploaded_files = st.file_uploader(
@@ -37,7 +35,7 @@ run = st.button("Extract data", type="primary", disabled=not uploaded_files)
 
 if run:
     if not api_key_input:
-        st.error("Please provide an OpenAI API key in the sidebar.")
+        st.error("Please provide a Gemini API key in the sidebar.")
         st.stop()
 
     os.environ["OPENAI_API_KEY"] = api_key_input
