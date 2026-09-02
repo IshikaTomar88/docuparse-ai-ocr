@@ -1,43 +1,39 @@
 # pipeline.py
 import os
-import base64
 import json
+import base64
 from datetime import datetime
-from openai import OpenAI
+from PIL import Image
 from pdf2image import convert_from_path
+from google import genai
+from google.genai import types
 
 SUPPORTED_EXTS = {".pdf", ".jpg", ".jpeg", ".png"}
 
 def get_client():
-    """Initializes the OpenAI client securely."""
-    api_key = os.environ.get("OPENAI_API_KEY", "")
+    """Initializes the Google GenAI client securely using the sidebar key."""
+    api_key = os.environ.get("OPENAI_API_KEY", "") # Keep variable name same so app.py doesn't break
     if not api_key:
-        raise ValueError("OpenAI API Key environment variable is missing.")
-    return OpenAI(api_key=api_key)
+        raise ValueError("Gemini API Key is missing. Enter it in the sidebar.")
+    return genai.Client(api_key=api_key)
 
 def convert_pdf_page_to_jpeg(pdf_path, output_dir):
-    """Converts the first page of a PDF file to a temporary JPEG string image."""
+    """Converts the first page of a PDF file to a temporary JPEG image."""
     try:
         pages = convert_from_path(pdf_path, dpi=150)
         if pages:
             jpeg_path = os.path.join(output_dir, "temp_render.jpg")
-            pages[0].save(jpeg_path, "JPEG")
+            pages.save(jpeg_path, "JPEG")
             return jpeg_path
     except Exception as e:
         print(f"PDF Conversion Error: {e}")
     return None
 
-def encode_image_base64(image_path):
-    """Encodes a local file into a standard base64 data utility string."""
-    with open(image_path, "rb") as img_file:
-        return base64.b64encode(img_file.read()).decode("utf-8")
-
-def process_single_file(client, file_path, tmp_path, model="gpt-4o-mini"):
+def process_single_file(client, file_path, tmp_path, model="gemini-2.0-flash"):
     """
-    Core Extraction Node: Sends base64 arrays to the Vision LLM 
-    and outputs a structured dictionary tracking our schema.
+    Core Extraction Node: Sends images to Google Gemini for free 
+    and outputs a structured dictionary mapping to your layout columns.
     """
-    # Default return template matching your EXPORT_COLUMNS structure in utils.py
     record = {
         "source_file": os.path.basename(file_path),
         "invoice_number": None,
@@ -49,7 +45,7 @@ def process_single_file(client, file_path, tmp_path, model="gpt-4o-mini"):
         "processed_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
     
-    working_image = str(file_path)
+    working_image_path = str(file_path)
     is_pdf = str(file_path).lower().endswith(".pdf")
     
     if is_pdf:
@@ -57,10 +53,11 @@ def process_single_file(client, file_path, tmp_path, model="gpt-4o-mini"):
         if not rendered_jpg:
             record["error"] = "Failed to convert PDF page down to JPEG image format."
             return record
-        working_image = rendered_jpg
+        working_image_path = rendered_jpg
 
     try:
-        base64_str = encode_image_base64(working_image)
+        # Load the image using Pillow for the Gemini SDK
+        raw_image = Image.open(working_image_path)
         
         prompt = """
         Analyze this invoice image structure. Extract data points into a valid JSON schema with keys:
@@ -70,28 +67,22 @@ def process_single_file(client, file_path, tmp_path, model="gpt-4o-mini"):
         - total_amount (float/number or null)
         - currency (string symbol/code like USD, INR or null)
         
-        Return ONLY raw valid JSON structures. Do not write markdown tags or block text code wrapping.
+        Return ONLY a raw valid JSON object structure. Do not wrap it in markdown block tags like ```json.
         """
         
-        response = client.chat.completions.create(
-            model=model,
-            response_format={"type": "json_object"},
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt},
-                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_str}"}}
-                    ]
-                }
-            ],
-            temperature=0.0,
-            max_tokens=400
+        # Call Google's multimodal API model with structured JSON constraint
+        response = client.models.generate_content(
+            model='gemini-2.0-flash',
+            contents=[raw_image, prompt],
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                temperature=0.0
+            ),
         )
         
-        extracted_data = json.loads(response.choices.message.content)
+        extracted_data = json.loads(response.text)
         
-        # Merge values cleanly over our default record dictionary array template keys
+        # Merge values over our default record dictionary layout template
         for key in ["invoice_number", "vendor_name", "invoice_date", "total_amount", "currency"]:
             if key in extracted_data:
                 record[key] = extracted_data[key]
