@@ -4,17 +4,16 @@ import json
 from datetime import datetime
 from PIL import Image
 from pdf2image import convert_from_path
-import google.generativeai as genai  # Clean cloud-compatible wrapper import
+import google.generativeai as genai  
 
 SUPPORTED_EXTS = {".pdf", ".jpg", ".jpeg", ".png"}
 
 def get_client():
     """Initializes and configures the free Google Gemini engine via the sidebar input."""
-    api_key = os.environ.get("OPENAI_API_KEY", "") # Preserving variable fallback matching app.py
+    api_key = os.environ.get("OPENAI_API_KEY", "") 
     if not api_key:
         raise ValueError("Gemini API Key is missing. Enter it in the app sidebar.")
     
-    # Configure the global genai engine state directly using the input token
     genai.configure(api_key=api_key)
     return genai
 
@@ -24,17 +23,15 @@ def convert_pdf_page_to_jpeg(pdf_path, output_dir):
         pages = convert_from_path(pdf_path, dpi=150)
         if pages:
             jpeg_path = os.path.join(output_dir, "temp_render.jpg")
-            # Fix: Call .save() on the first page image object in the list
             pages[0].save(jpeg_path, "JPEG")
             return jpeg_path
     except Exception as e:
         print(f"PDF Conversion Error: {e}")
     return None
 
-def process_single_file(client, file_path, tmp_path, model="gemini-2.0-flash"):
+def process_single_file(client, file_path, tmp_path, model="gemini-3.6-flash"):
     """
-    Core Extraction Node: Sends images to Google Gemini for free 
-    and outputs a structured dictionary mapping to your Streamlit table layout.
+    Core Extraction Node: Sends images to Google Gemini and outputs a structured dictionary.
     """
     record = {
         "source_file": os.path.basename(file_path),
@@ -58,7 +55,6 @@ def process_single_file(client, file_path, tmp_path, model="gemini-2.0-flash"):
         working_image_path = rendered_jpg
 
     try:
-        # Load visual data matrix via Pillow
         raw_image = Image.open(working_image_path)
         
         prompt = """
@@ -73,7 +69,7 @@ def process_single_file(client, file_path, tmp_path, model="gemini-2.0-flash"):
         Return ONLY the raw valid JSON object structure text. Do not wrap it in markdown block tags like ```json.
         """
         
-        # Instantiate the cloud-safe Gemini generation pipeline node using the selected model parameter
+        # Uses the active model passed from Streamlit sidebar dropdown
         vision_model = genai.GenerativeModel(model)
         
         response = vision_model.generate_content(
@@ -83,7 +79,6 @@ def process_single_file(client, file_path, tmp_path, model="gemini-2.0-flash"):
         
         extracted_data = json.loads(response.text)
         
-        # Map values directly over our default column tracking index dictionary structure
         for key in ["invoice_number", "vendor_name", "invoice_date", "total_amount", "currency"]:
             if key in extracted_data:
                 record[key] = extracted_data[key]
