@@ -1,3 +1,12 @@
+"""
+app.py
+------
+Streamlit UI for the Gemini-based invoice extractor.
+Run locally:  streamlit run app.py
+Deploy free:  push to GitHub, deploy on streamlit.io/cloud, add GEMINI_API_KEY
+              as a secret. packages.txt installs poppler-utils automatically.
+"""
+
 import os
 import tempfile
 from pathlib import Path
@@ -7,30 +16,31 @@ import streamlit as st
 from pipeline import SUPPORTED_EXTS, get_client, process_single_file
 from utils import dataframe_to_csv_bytes, dataframe_to_excel_bytes, records_to_dataframe
 
-# Page Configuration Setup
-st.set_page_config(page_title="DocuParse AI", page_icon="🧠", layout="wide")
+st.set_page_config(page_title="DocuParse AI (Gemini)", page_icon="🧠", layout="wide")
 
-st.title("🧠 DocuParse AI")
+st.title("🧠 DocuParse AI — Gemini Edition")
 st.caption("Vision-LLM invoice extraction — understands document layout, not just characters.")
 
-# Sidebar Configuration Layout
 with st.sidebar:
     st.header("Settings")
     api_key_input = st.text_input(
         "Gemini API Key", type="password",
-        value=os.environ.get("OPENAI_API_KEY", ""),
-        help="Paste your free Google AI Studio key here.",
+        value=os.environ.get("GEMINI_API_KEY", ""),
+        help="Get a free key at aistudio.google.com/apikey",
     )
-    model = st.selectbox("Model", ["gemini-3.6-flash", "gemini-2.5-flash"], index=0)
+    # gemini-2.5-flash is NOT offered here: it shuts down Oct 16, 2026
+    # (Gemini Developer API) per Google's own deprecation notice — offering
+    # it in a dropdown today would mean shipping a client something that
+    # stops working in weeks. gemini-3.6-flash is the current GA flash
+    # model; gemini-3.5-flash-lite is the cheaper/faster alternative.
+    model = st.selectbox("Model", ["gemini-3.6-flash", "gemini-3.5-flash-lite"], index=0)
 
-# Main File Ingestion Uploader 
 uploaded_files = st.file_uploader(
     "Upload invoices (PDF, JPG, PNG)",
     type=["pdf", "jpg", "jpeg", "png"],
     accept_multiple_files=True,
 )
 
-# Core Action Trigger Button Node
 run = st.button("Extract data", type="primary", disabled=not uploaded_files)
 
 if run:
@@ -38,7 +48,7 @@ if run:
         st.error("Please provide a Gemini API key in the sidebar.")
         st.stop()
 
-    os.environ["OPENAI_API_KEY"] = api_key_input
+    os.environ["GEMINI_API_KEY"] = api_key_input
     try:
         client = get_client()
     except Exception as exc:
@@ -47,7 +57,7 @@ if run:
 
     records = []
     progress = st.progress(0.0, text="Starting...")
-    
+
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp_path = Path(tmp_dir)
         for i, uploaded in enumerate(uploaded_files):
@@ -62,7 +72,6 @@ if run:
 
         progress.progress(1.0, text="Done")
 
-    # Format the array outputs into a structured Pandas tabular layout
     df = records_to_dataframe(records)
     st.success(f"Extracted {len(df)} document(s).")
     st.dataframe(df, use_container_width=True)
@@ -70,9 +79,7 @@ if run:
     if (df["error"].notna()).any():
         st.warning(f"{df['error'].notna().sum()} row(s) had an extraction error — check the `error` column.")
 
-    # Export & Download Pipeline Nodes
     excel_bytes = dataframe_to_excel_bytes(df)
-    
     st.download_button(
         "⬇️ Download as Excel",
         data=excel_bytes,
